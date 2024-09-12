@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Script Generator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+        }
+        .container {
+            max-width: 600px;
+            margin: auto;
+        }
+        input[type="text"], button {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .output {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f1f1f1;
+            border: 1px solid #ddd;
+            white-space: pre-wrap;  /* Keeps newlines */
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Generate a Script</h1>
+        <input type="text" id="topic" placeholder="Enter topic here..." />
+        <button onclick="generateScript()">Generate Script</button>
+        
+        <div class="output" id="output"></div>
+    </div>
+
+    <script>
+        async function generateScript() {
+            const topic = document.getElementById("topic").value;
+            const output = document.getElementById("output");
+            output.innerHTML = "";  // Clear previous output
+            
+            if (!topic) {
+                output.innerHTML = "Please enter a topic.";
+                return;
+            }
+
+            output.innerHTML = "Generating script, please wait...\n";
+
+            try {
+                const response = await fetch("http://127.0.0.1:8000/generate-script", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({ topic: topic }),
+                });
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let done = false;
+                
+                while (!done) {
+                    const { value, done: readerDone } = await reader.read();
+                    done = readerDone;
+                    output.innerHTML += decoder.decode(value, { stream: true });
+                }
+            } catch (error) {
+                output.innerHTML = "Error: " + error.message;
+            }
+        }
+    </script>
+
+</body>
+</html>
