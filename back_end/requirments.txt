@@ -1,0 +1,6 @@
+crewai
+langchain_groq
+pydantic
+fastapi
+requests
+resend
