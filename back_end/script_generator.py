@@ -141,8 +141,8 @@ class ScriptGenerator:
         headers = {
             "accept": "application/json",
             "content-type": "application/json",
-            "AUTHORIZATION": "19df1d28bb4f4097b9a1c9c429410a44",
-            "X-USER-ID": "8Ot3AqDhtgZtZ8TEe0XzegXpNfy1"
+            "AUTHORIZATION": os.environ["PLAYHT_API_KEY"],
+            "X-USER-ID": os.environ["PLAYHT_USER_ID"]
         }
 
         voice_link = (
