@@ -1,4 +1,3 @@
-import './App.css';
 import ScriptGenerator from './components/ScriptGenerator';
 
 function App() {

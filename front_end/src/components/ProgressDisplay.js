@@ -16,7 +16,6 @@ function ProgressDisplay({ jobId }) {
   const [audioMap, setAudioMap] = useState([]);
   const [iconKey, setIconKey] = useState('default');
   const [error, setError] = useState(false);
-  const [processedMessageIds, setProcessedMessageIds] = useState(new Set());
 
   // Splitting the currentMessage into individual characters
   const letters = currentMessage.split("");

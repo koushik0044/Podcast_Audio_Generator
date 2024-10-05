@@ -39,7 +39,7 @@ const AudioDisplay = ({ items }) => {
     visible: {
       opacity: 1,
       transition: {
-        staggerChildren: 0.1, // Delay between each character
+        staggerChildren: 0.15, // Delay between each character
       },
     },
   };
@@ -148,7 +148,7 @@ const AudioDisplay = ({ items }) => {
       });
     }
     // Reset display text
-  }, [currentItemIndex, isPlaying, items]);
+  }, [currentItemIndex, isPlaying, items , startAmplitudeUpdates]);
 
   // Handle play/pause when isPlaying changes
   useEffect(() => {
@@ -166,7 +166,7 @@ const AudioDisplay = ({ items }) => {
         stopAmplitudeUpdates();
       }
     }
-  }, [isPlaying]);
+  }, [isPlaying , startAmplitudeUpdates]);
 
   // Amplitude Update Function
   const updateAmplitude = () => {
