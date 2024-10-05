@@ -16,7 +16,7 @@ class ScriptGenerator:
         self.Task_Completion_Counter = 0
 
         # Email
-        resend.api_key = os.environ["RESEND_API_KEY"]
+        resend.api_key = os.environ.get('RESEND_API_KEY')
         self.params: resend.Emails.SendParams = {
             "from": "PAG <PAG@resend.dev>",
             "to": ["munnasai2000@gmail.com"],
@@ -141,8 +141,8 @@ class ScriptGenerator:
         headers = {
             "accept": "application/json",
             "content-type": "application/json",
-            "AUTHORIZATION": os.environ["PLAYHT_API_KEY"],
-            "X-USER-ID": os.environ["PLAYHT_USER_ID"]
+            "AUTHORIZATION": os.environ.get('PLAYHT_API_KEY'),
+            "X-USER-ID": os.environ.get('PLAYHT_USER_ID')
         }
 
         voice_link = (

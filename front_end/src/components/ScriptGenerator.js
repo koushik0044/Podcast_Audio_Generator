@@ -35,7 +35,7 @@ function ScriptGenerator() {
     }
 
     try {
-      const response = await axios.post('http://localhost:8000/generate-script', { topic });
+      const response = await axios.post('https://podcast-audio-generator.onrender.com/generate-script', { topic });
       setJobId(response.data.job_id);
     } catch (error) {
       console.error('Error initiating script generation:', error);

@@ -4,8 +4,8 @@ from crewai_tools import SerperDevTool, ScrapeWebsiteTool
 from langchain_groq import ChatGroq
 
 # Initialize LLM and tools
-llm = ChatGroq(api_key=os.environ['GROQ_API_KEY'], model='llama-3.1-70b-versatile')
-google_search_tool = SerperDevTool(api_key=os.environ["SERPER_API_KEY"])
+llm = ChatGroq(api_key=os.environ.get('GROQ_API_KEY'), model='llama-3.1-70b-versatile')
+google_search_tool = SerperDevTool(api_key=os.environ.get('SERPER_API_KEY'))
 
 # Agents
 news_researcher = Agent(

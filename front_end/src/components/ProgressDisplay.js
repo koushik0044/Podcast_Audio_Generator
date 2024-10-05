@@ -52,7 +52,7 @@ function ProgressDisplay({ jobId }) {
   
     const fetchProgress = async () => {
       try {
-        const response = await axios.get(`http://localhost:8000/progress/${jobId}`);
+        const response = await axios.get(`https://podcast-audio-generator.onrender.com/progress/${jobId}`);
         const data = response.data;
         setStatus(data.status);
   
