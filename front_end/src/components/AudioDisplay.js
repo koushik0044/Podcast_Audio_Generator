@@ -148,7 +148,7 @@ const AudioDisplay = ({ items }) => {
       });
     }
     // Reset display text
-  }, [currentItemIndex, isPlaying, items , startAmplitudeUpdates]);
+  }, [currentItemIndex, isPlaying, items]);
 
   // Handle play/pause when isPlaying changes
   useEffect(() => {
@@ -166,7 +166,7 @@ const AudioDisplay = ({ items }) => {
         stopAmplitudeUpdates();
       }
     }
-  }, [isPlaying , startAmplitudeUpdates]);
+  }, [isPlaying]);
 
   // Amplitude Update Function
   const updateAmplitude = () => {
@@ -380,7 +380,7 @@ const AudioDisplay = ({ items }) => {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ delay: 0.5, duration: 0.7 }}
-      className="relative bg-transparent border border-white border-opacity-20 rounded-md p-4 text-white text-left text-xl w-96 h-96 flex items-center justify-evenly whitespace-normal"
+      className="relative bg-transparent border border-white border-opacity-20 rounded-md p-4 text-white text-center text-xl w-96 h-96 flex items-center justify-center whitespace-normal"
       >
         {isTextVisible && items[currentItemIndex] && (
           <motion.div
