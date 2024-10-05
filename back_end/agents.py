@@ -2,9 +2,11 @@ import os
 from crewai import Agent
 from crewai_tools import SerperDevTool, ScrapeWebsiteTool
 from langchain_groq import ChatGroq
+from langchain_openai import ChatOpenAI
 
 # Initialize LLM and tools
-llm = ChatGroq(api_key=os.environ.get('GROQ_API_KEY'), model='llama-3.1-70b-versatile')
+# llm = ChatGroq(api_key=os.environ.get('GROQ_API_KEY'), model='llama-3.1-70b-versatile')
+llm = ChatOpenAI(api_key=os.environ.get('OPENAI_API_KEY') , model_name = "gpt-4o",temperature=0)
 google_search_tool = SerperDevTool(api_key=os.environ.get('SERPER_API_KEY'))
 
 # Agents
