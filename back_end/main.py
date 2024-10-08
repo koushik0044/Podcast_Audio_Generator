@@ -5,6 +5,9 @@ from fastapi import FastAPI, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from progress_manager import ProgressManager
 from script_generator import ScriptGenerator
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Define a Pydantic model for the expected input
 class TopicRequest(BaseModel):
@@ -38,10 +41,13 @@ async def create_script(request: TopicRequest, background_tasks: BackgroundTasks
     return {"job_id": job_id}
 
 def run_script_generation(topic, job_id):
-    # Create an instance of ScriptGenerator
-    generator = ScriptGenerator(progress_manager, job_id)
-    # Generate the script
-    generator.generate_script(topic)
+    logger.info(f"Starting script generation for job_id: {job_id} with topic: {topic}")
+    try:
+        generator = ScriptGenerator(progress_manager, job_id)
+        generator.generate_script(topic)
+        logger.info(f"Completed script generation for job_id: {job_id}")
+    except Exception as e:
+        logger.error(f"Error in job {job_id}: {str(e)}")
 
 @app.get("/progress/{job_id}")
 async def get_progress(job_id: str):
