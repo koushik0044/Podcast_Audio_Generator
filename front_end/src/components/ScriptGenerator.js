@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 function ScriptGenerator() {
   const [topic, setTopic] = useState('');
   const [jobId, setJobId] = useState(null);
+  const [loading, setLoading] = useState(false);
 
   const text = "Podcast Audio Generator";
   const letters = text.split("");
@@ -33,13 +34,15 @@ function ScriptGenerator() {
       alert('Please enter a topic.');
       return;
     }
-
+    setLoading(true);
     try {
       const response = await axios.post('https://podcast-audio-generator.onrender.com/generate-script', { topic });
       setJobId(response.data.job_id);
     } catch (error) {
       console.error('Error initiating script generation:', error);
       alert('Failed to start script generation.');
+    }finally {
+      setLoading(false);
     }
   };
 
@@ -82,21 +85,29 @@ function ScriptGenerator() {
           >
           {/* Submit Button with hover invert effect */}
           <motion.button
-  type="submit"
-  className="bg-transparent opacity-70 text-white border border-white rounded-md px-6 py-3"
-  whileHover={{
-    scale: 1.1,                // Slightly scale up on hover
-    backgroundColor: "rgba(255, 255, 255, 0.7)",  // Change background on hover
-    color: "#ffffff",           // Change text color on hover
-  }}
-  whileTap={{ scale: 0.95 }}    // Scale down slightly on press
-  transition={{
-    duration: 0.1,              // Transition duration for the animation
-    ease: "easeInOut",
-  }}
->
-  Generate
-</motion.button>
+            type="submit"
+            className={`flex items-center justify-center bg-transparent opacity-70 text-white border border-white rounded-md px-6 py-3 ${
+              loading ? 'cursor-not-allowed' : ''
+            }`}
+            whileHover={
+              !loading && {
+                scale: 1.1, // Slightly scale up on hover
+                color: "#ffffff", // Change text color on hover
+              }
+            }
+            whileTap={!loading && { scale: 0.95 }} // Scale down slightly on press
+            transition={{ duration: 0.1, ease: "easeInOut" }}
+            disabled={loading} // Disable the button while loading
+          >
+            {loading ? (
+              // Loading spinner
+              <motion.div
+                className="w-5 h-5 border-4 border-t-transparent border-white rounded-full animate-spin"
+              ></motion.div>
+            ) : (
+              'Generate'
+            )}
+          </motion.button>
           </motion.div>
 
         </form>
