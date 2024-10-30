@@ -24,7 +24,7 @@ Check out the live version of the app [here](https://podcastaudiogenerator.onren
 - Backend integration to handle conversation generation.
 
 ## Demo Video
-[Watch the Demo](demo.mp4)
+[Watch the Demo](https://youtu.be/tvtCSuJzYpc)
 
 ## Backend Architecture
 ![Backend Architecture](Architecture.png)
