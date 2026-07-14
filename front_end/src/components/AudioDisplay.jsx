@@ -1,14 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { motion } from 'framer-motion';
+import { audioUrl } from '../api';
 import TextDisplay from './TextDisplay';
 import AudioControls from './AudioControls';
 import LoadingIndicator from './LoadingIndicator';
 
-const AudioDisplay = ({ items }) => {
+const AudioDisplay = ({ items, isComplete = true, onReset }) => {
   // State Variables
   const [currentItemIndex, setCurrentItemIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isTextVisible, setIsTextVisible] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  // True when playback has caught up to the generator and is waiting for the
+  // next line. `items` grows while the job runs, so this is expected, not an error.
+  const [isWaiting, setIsWaiting] = useState(false);
 
   // Refs
   const audioRef = useRef(null);
@@ -17,6 +22,11 @@ const AudioDisplay = ({ items }) => {
   const analyserRef = useRef(null);
   const animationFrameIdRef = useRef(null);
   const currentItemIndexRef = useRef(currentItemIndex);
+  // Mirrors of live props/state, so the mount-once `ended` listener below reads
+  // current values instead of the ones captured in its closure.
+  const itemsRef = useRef(items);
+  const isCompleteRef = useRef(isComplete);
+  const isPlayingRef = useRef(isPlaying);
 
   // SiriWave Configurations
   const [siriWaveConfigs, setSiriWaveConfigs] = useState({
@@ -68,10 +78,22 @@ const AudioDisplay = ({ items }) => {
   const download_msg = "Downloading...";
   const text =  download_msg.split("");
 
-  // Update currentItemIndexRef whenever currentItemIndex changes
+  // Keep the refs above in sync with the live values.
   useEffect(() => {
     currentItemIndexRef.current = currentItemIndex;
   }, [currentItemIndex]);
+
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
+
+  useEffect(() => {
+    isCompleteRef.current = isComplete;
+  }, [isComplete]);
+
+  useEffect(() => {
+    isPlayingRef.current = isPlaying;
+  }, [isPlaying]);
 
   // Initialize AudioContext and Audio Element on mount
   useEffect(() => {
@@ -94,8 +116,14 @@ const AudioDisplay = ({ items }) => {
 
     // Event listener for audio ended
     const handleEnded = () => {
-      if (currentItemIndexRef.current + 1 < items.length) {
-        setCurrentItemIndex((prevIndex) => prevIndex + 1);
+      const next = currentItemIndexRef.current + 1;
+
+      if (next < itemsRef.current.length) {
+        setCurrentItemIndex(next);
+      } else if (!isCompleteRef.current) {
+        // Caught up with the generator. Hold position; the effect below resumes
+        // us as soon as the next line's audio lands.
+        setIsWaiting(true);
       } else {
         setCurrentItemIndex(0);
         setIsTextVisible(false);
@@ -117,36 +145,69 @@ const AudioDisplay = ({ items }) => {
         audioContextRef.current.close();
       }
     };
-  }, [items.length]);
+    // Mount once. This used to key on [items.length], which meant every new line
+    // streamed in tore down and rebuilt the whole Web Audio graph mid-playback.
+  }, []);
 
-  // Update audio source when currentItemIndex changes
+  // Resume once the generator produces the line we were waiting for.
   useEffect(() => {
-    if (audioRef.current && items[currentItemIndex]) {
-      fetch(items[currentItemIndex].audioUrl)
-        .then((response) => {
-          if (!response.ok) {
-            throw new Error('Network response was not ok');
-          }
-          return response.blob(); // Convert the response to a Blob
-        })
-        .then((blob) => {
-          const blobUrl = URL.createObjectURL(blob); // Create a blob URL for the audio
-          audioRef.current.src = blobUrl; // Set the audio element source to the blob URL
-          audioRef.current.load();
-          if (isPlaying) {
-            audioRef.current.play().catch((error) => {
-              console.error('Error playing audio:', error);
-              setIsPlaying(false);
-            });
-            startAmplitudeUpdates();
-          }
-        })
-        .catch((error) => {
-          console.error('Error fetching the audio file:', error);
-        });
+    if (!isWaiting) return;
+
+    if (currentItemIndex + 1 < items.length) {
+      setIsWaiting(false);
+      setCurrentItemIndex((prevIndex) => prevIndex + 1);
+    } else if (isComplete) {
+      // Job finished and there is nothing more coming: end normally.
+      setIsWaiting(false);
+      setIsPlaying(false);
+      setIsTextVisible(false);
+      setCurrentItemIndex(0);
     }
-    // Reset display text
-  }, [currentItemIndex, isPlaying, items]);
+  }, [isWaiting, isComplete, items.length, currentItemIndex]);
+
+  // Load the current clip.
+  // Keyed on the clip's URL, not on `items`: ProgressDisplay hands us a fresh
+  // array every poll, and `isPlaying` used to be a dependency too - so pausing
+  // re-downloaded the entire clip.
+  const currentAudioUrl = items[currentItemIndex]?.audioUrl;
+
+  useEffect(() => {
+    if (!audioRef.current || !currentAudioUrl) return undefined;
+
+    let objectUrl;
+    let stale = false;
+
+    // audioUrl() prefixes the API base. The backend serves a *relative* path,
+    // which a bare fetch() would resolve against the frontend's origin and 404.
+    fetch(audioUrl(currentAudioUrl))
+      .then((response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.blob();
+      })
+      .then((blob) => {
+        if (stale) return;
+        objectUrl = URL.createObjectURL(blob);
+        audioRef.current.src = objectUrl;
+        audioRef.current.load();
+
+        if (isPlayingRef.current) {
+          audioRef.current.play().catch((error) => {
+            console.error('Error playing audio:', error);
+            setIsPlaying(false);
+          });
+          startAmplitudeUpdates();
+        }
+      })
+      .catch((error) => {
+        console.error('Error fetching the audio file:', error);
+      });
+
+    return () => {
+      stale = true;
+      // Previously never revoked: one leaked blob per clip, per play.
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [currentAudioUrl]);
 
   // Handle play/pause when isPlaying changes
   useEffect(() => {
@@ -236,21 +297,21 @@ const AudioDisplay = ({ items }) => {
 
   // Download Concatenated Audio
   const handleDownload = async () => {
+    let audioContext;
     try {
       setIsDownloading(true);
 
       // Fetch all audio files as ArrayBuffers
       const audioBuffers = await Promise.all(
         items.map(async (item) => {
-          const response = await fetch(item.audioUrl);
+          const response = await fetch(audioUrl(item.audioUrl));
           if (!response.ok) throw new Error(`Failed to fetch ${item.audioUrl}`);
           return await response.arrayBuffer();
         })
       );
 
       // Decode audio files
-      const audioContext = new (window.AudioContext ||
-        window.webkitAudioContext)();
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
       const decodedBuffers = await Promise.all(
         audioBuffers.map((buffer) =>
           audioContext.decodeAudioData(buffer)
@@ -297,8 +358,9 @@ const AudioDisplay = ({ items }) => {
       URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Error downloading audio:', error);
-      alert('Failed to download audio.');
     } finally {
+      // This context is separate from the playback one and used to be left open.
+      if (audioContext) audioContext.close();
       setTimeout(() => {
         setIsDownloading(false);
       }, 2000);
@@ -400,6 +462,26 @@ const AudioDisplay = ({ items }) => {
         messageContainer={messageContainer}
         messageChild={messageChild}
       />
+
+      {/* Playback outran the generator, or the job is still producing lines. */}
+      {!isComplete && (
+        <p className="text-white text-sm opacity-60">
+          {isWaiting
+            ? 'Waiting for the next line...'
+            : `Generating... ${items.length} line${items.length === 1 ? '' : 's'} ready`}
+        </p>
+      )}
+
+      {isComplete && onReset && (
+        <motion.button
+          onClick={onReset}
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.95 }}
+          className="bg-transparent opacity-60 text-white border border-white rounded-md px-4 py-2 text-sm"
+        >
+          Try another topic
+        </motion.button>
+      )}
     </div>
   );
 };

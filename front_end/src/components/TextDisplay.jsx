@@ -1,6 +1,17 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 
+/**
+ * Emotion now lives inline in the script as ElevenLabs audio tags ("[laughs]",
+ * "[curious]"). The voice model performs them; a reader should never see them.
+ * Mirrors strip_audio_tags() in back_end/tts.py.
+ */
+export const spokenText = (text = '') =>
+  text
+    .replace(/\[[^\]]*\]/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+
 const TextDisplay = ({
   isTextVisible,
   items,
@@ -22,7 +33,7 @@ const TextDisplay = ({
           initial="hidden"
           animate="visible"
         >
-          {items[currentItemIndex].text
+          {spokenText(items[currentItemIndex].text)
             .split(/(\s+)/)
             .map((word, index) => (
               <motion.span

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import axios from 'axios';
+import { startJob } from '../api';
 import ProgressDisplay from './ProgressDisplay';
 import { motion } from "framer-motion";
 
@@ -7,6 +7,7 @@ function ScriptGenerator() {
   const [topic, setTopic] = useState('');
   const [jobId, setJobId] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [submitError, setSubmitError] = useState('');
 
   const text = "Podcast Audio Generator";
   const letters = text.split("");
@@ -30,20 +31,32 @@ function ScriptGenerator() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!topic) {
-      alert('Please enter a topic.');
+    const trimmed = topic.trim();
+    if (!trimmed) {
+      setSubmitError('Please enter a topic.');
       return;
     }
+    setSubmitError('');
     setLoading(true);
     try {
-      const response = await axios.post('https://podcast-audio-generator.onrender.com/generate-script', { topic });
+      const response = await startJob(trimmed);
       setJobId(response.data.job_id);
     } catch (error) {
       console.error('Error initiating script generation:', error);
-      alert('Failed to start script generation.');
-    }finally {
+      setSubmitError(
+        error.response?.data?.detail ??
+          'Could not reach the backend. Is it running?'
+      );
+    } finally {
       setLoading(false);
     }
+  };
+
+  // Lets ErrorPage / a finished job send the user back to the form.
+  const reset = () => {
+    setJobId(null);
+    setTopic('');
+    setSubmitError('');
   };
 
   return (
@@ -110,10 +123,20 @@ function ScriptGenerator() {
           </motion.button>
           </motion.div>
 
+          {submitError && (
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="text-red-300 text-sm max-w-xs text-center"
+            >
+              {submitError}
+            </motion.p>
+          )}
+
         </form>
       </div>
       ) : (
-        <ProgressDisplay jobId={jobId} />
+        <ProgressDisplay jobId={jobId} onReset={reset} />
       )}
     </div>
   );

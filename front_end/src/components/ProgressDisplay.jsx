@@ -1,6 +1,6 @@
-// ProgressDisplay.js
+// ProgressDisplay.jsx
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import { getProgress } from '../api';
 import AudioDisplay from './AudioDisplay';
 import ErrorPage from './ErrorPage';
 import Lottie from 'lottie-react';
@@ -10,12 +10,12 @@ import writerIcon from '../icons/write-agent-icon.json';
 import ttsIcon from '../icons/TTS-icon.json';
 import { motion } from "framer-motion";
 
-function ProgressDisplay({ jobId }) {
+function ProgressDisplay({ jobId, onReset }) {
   const [status, setStatus] = useState('started');
   const [currentMessage, setCurrentMessage] = useState('');
   const [audioMap, setAudioMap] = useState([]);
   const [iconKey, setIconKey] = useState('default');
-  const [error, setError] = useState(false);
+  const [error, setError] = useState('');
 
   // Splitting the currentMessage into individual characters
   const letters = currentMessage.split("");
@@ -48,65 +48,86 @@ function ProgressDisplay({ jobId }) {
 
   useEffect(() => {
     let intervalId;
-  
+    let cancelled = false;
+
+    const stop = () => clearInterval(intervalId);
+
     const fetchProgress = async () => {
       try {
-        const response = await axios.get(`https://podcast-audio-generator.onrender.com/progress/${jobId}`);
-        const data = response.data;
+        const { data } = await getProgress(jobId);
+        if (cancelled) return;
+
         setStatus(data.status);
-  
+
         if (data.progress && data.progress.length > 0) {
           const lastMessage = data.progress[data.progress.length - 1];
-  
+
           if (lastMessage.type === 'string') {
             setCurrentMessage(lastMessage.message);
-            // Change icon when new message arrives
             setIconKey(lastMessage.status);
           } else if (lastMessage.type === 'audio') {
-            setCurrentMessage(`Audio for dialogue ${lastMessage.line_number + 1} out of ${lastMessage.no_of_dialogues} has been generated...`);
-            // Change icon when processing audio
+            setCurrentMessage(
+              `Audio for dialogue ${lastMessage.line_number + 1} out of ${lastMessage.no_of_dialogues} has been generated...`
+            );
             setIconKey('TTS');
-          } else if (lastMessage.type === 'error') {
-            setError(true);
-            clearInterval(intervalId);
           }
-  
-          // Reconstruct audioMap from all audio messages
-          const audioMessages = data.progress.filter(msg => msg.type === 'audio');
-          const audioItems = audioMessages.map(msg => ({
-            audioUrl: msg.audio_url,
-            text: msg.text,
-          }));
-          setAudioMap(audioItems);
+
+          // Rebuild the playlist from every audio event seen so far. The player
+          // consumes this as it grows, so lines play while the rest generate.
+          setAudioMap(
+            data.progress
+              .filter((msg) => msg.type === 'audio')
+              .map((msg) => ({ audioUrl: msg.audio_url, text: msg.text }))
+          );
         }
-  
-        if (data.status === 'completed' || data.status === 'failed') {
-          clearInterval(intervalId);
+
+        if (data.status === 'failed') {
+          // Previously this only cleared the interval, so the UI hung on the
+          // last message forever and a failure looked exactly like a slow job.
+          setError(data.error || 'Generation failed.');
+          stop();
+        } else if (data.status === 'completed') {
+          stop();
         }
       } catch (err) {
+        if (cancelled) return;
         console.error('Error fetching progress:', err);
-        setError(true);
-        clearInterval(intervalId);
+        // An unknown job id is now a 404 (it used to be a 200 with an error body).
+        setError(
+          err.response?.status === 404
+            ? 'That job no longer exists. It may have expired.'
+            : 'Lost contact with the backend. Is it still running?'
+        );
+        stop();
       }
     };
-  
-    // Poll every 2 seconds
+
     intervalId = setInterval(fetchProgress, 2000);
-    // Fetch immediately on mount
     fetchProgress();
-  
-    return () => clearInterval(intervalId);
+
+    return () => {
+      cancelled = true;
+      stop();
+    };
   }, [jobId]);
 
   if (error) {
-    return <ErrorPage errorMessage='I might have Ran out of Credits , Please Come Back Tommorow' />;
+    return <ErrorPage errorMessage={error} onReset={onReset} />;
   }
 
-  // If status is 'completed', render AudioDisplay component
-  if (status === 'completed') {
-    return (<div className="absolute inset-0 flex items-center justify-center">
-      <AudioDisplay items={audioMap} />
-    </div>);
+  // Show the player as soon as the first line's audio exists, rather than
+  // waiting for the whole job. The backend streams audio per line; waiting for
+  // 'completed' threw that away and left the user on a spinner for the duration.
+  if (audioMap.length > 0) {
+    return (
+      <div className="absolute inset-0 flex items-center justify-center">
+        <AudioDisplay
+          items={audioMap}
+          isComplete={status === 'completed'}
+          onReset={onReset}
+        />
+      </div>
+    );
   }
 
   // Get the current icon
