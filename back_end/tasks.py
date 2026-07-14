@@ -1,48 +1,71 @@
 from crewai import Task
 
-# Tasks
-fetch_news_task = Task(
-    description=(
-        "Research and fetch the news articles summaries for the given topic. "
-        "Ensure to get the recent and relevant articles. "
-        "Use the search tool to get the latest news articles for the given topic and summarize the information. "
-        "Topic: {topic}"
-    ),
-    expected_output='A summary of the news articles that are found on the topic.',
-    agent=None,
-    verbose=False,
-    max_itrs=3,
+from schemas import PodcastScript
+
+# Tags the writer may use. Kept to a set eleven_v3 performs reliably.
+AUDIO_TAGS = (
+    "[laughs] [chuckles] [sighs] [gasps] [clears throat] "
+    "[excited] [curious] [thoughtful] [calm] [nervous] [sarcastic] "
+    "[whispers] [pauses] [hesitates]"
 )
 
-write_script_task = Task(
-    description=(
-        "Generate a podcast script based on the information fetched from the news_researcher with two speakers: one male interviewer and one female interviewee."
-        "The script should follow a casual interview style where one speaker interviews the other regarding the topic."
-        'Use "....." for thoughtful pauses when the speaker is considering their response or the conversation shifts to a more serious tone. Use "hahahaha" to indicate laughter.'
-        "The output should only contain the JSON object. Each JSON object should include:"
-        ' 1) "text": "The text to be converted to speech.", "voice": "Male or Female",'
-        ' 2) "emotion": The emotion of the dialogue . emotion must be one of [female_happy, female_sad, female_angry, female_fearful, female_disgust, female_surprised, male_happy, male_sad, male_angry, male_fearful, male_disgust, male_surprised, null] , '
-        ' 3) "style_guidance": A Number between 12 to 17 . "Specify how strong the emotion should be using a number between 12 and 17. Use a lower value for less intense emotion and normal prosody, and a higher value to increase the emotion for more prosody.",'
-        ' 4) "speed": A Number between 0.8 to 1 . "Control how fast the generated audio should be. A number between 0.8 and 1.0. Use slower speeds when the speaker is reflecting or the content is complex. Use faster speeds during lighter or more casual parts of the conversation." '
-        "Absolutely make sure that the emotion is from the specified list"
-        "Here's an example: "
-        '{{ "text": "Why are you here?", "voice": "Male", "emotion": "male_angry", "style_guidance": 20, "speed": 1 }},'
-        '{{ "text": "Well, thats a tough question..... Let me think about that for a moment.", "voice": "Female", "emotion": "female_fearful", "style_guidance": 10, "speed": 0.8 }} '
-        "Start the script:"
-    ),
-    expected_output=(
-        "A JSON-formatted podcast script. The script should contain a series of JSON objects representing the dialogue between the male interviewer and the female interviewee.\n"
-        "The script should clearly reflect a casual interview style, with appropriate use of pauses (.....) and laughter (hahahaha) as indicated.\n"
-        "Each JSON object must include the following fields:\n\n"
-        '1) "text": The text that will be converted to speech.\n'
-        '2) "voice": The gender of the speaker, either "Male" or "Female".\n'
-        '3) "emotion": emotion must be one of [female_happy, female_sad, female_angry, female_fearful, female_disgust, female_surprised, male_happy, male_sad, male_angry, male_fearful, male_disgust, male_surprised, null]\n'
-        '4) "style_guidance": A number between 12 and 17 indicating the intensity of the emotion, with higher values representing more intense emotions.\n'
-        '5) "speed": A number between 0.8 and 1.0 representing the speed of the speech, with lower values for slower speeds and higher values for faster speeds.\n'
-        "The output must ensure that all emotions are within the specified list."
-    ),
-    context=[],
-    agent=None,
-    verbose=False,
-    max_itrs=5
-)
+
+def build_tasks(news_researcher, senior_script_writer):
+    """Fresh tasks per job.
+
+    These used to be module-level singletons that the caller mutated in place --
+    it formatted `{topic}` straight into the shared description, so every job
+    after the first silently reran the *first* job's topic. Building them per job
+    keeps the `{topic}` placeholder intact for Crew.kickoff(inputs=...) to
+    interpolate, and stops concurrent jobs racing on shared state.
+    """
+    fetch_news_task = Task(
+        description=(
+            "Research the latest news on this topic: {topic}\n\n"
+            "Call search_recent_news once with the topic as the search_query, then "
+            "summarize what you find. Do not search repeatedly.\n"
+            "Write a summary of at most 250 words covering the most newsworthy "
+            "developments, including any specific facts, names, and dates."
+        ),
+        expected_output="A concise summary (max 250 words) of the recent news on the topic.",
+        agent=news_researcher,
+    )
+
+    write_script_task = Task(
+        description=(
+            "Write an original podcast script about {topic}, informed by the News Researcher's summary. "
+            "Two fictional hosts discuss the news in their own words: a male interviewer and a female "
+            "interviewee, in a casual interview style. They are invented commentators, not real people, "
+            "and they must not be presented as quoting anyone. Discuss the reported facts as commentary.\n\n"
+            "Direct the vocal performance using audio tags, which are cues in square brackets placed inline "
+            "in the spoken text. The voice model performs them. Use only these tags:\n"
+            f"{AUDIO_TAGS}\n\n"
+            "Guidance:\n"
+            "- Place a tag immediately before the words it should colour, e.g. "
+            '"[laughs] That is a great question."\n'
+            "- Use tags sparingly, at most one or two per line. Unmarked lines are fine and sound natural.\n"
+            "- Use an ellipsis (...) for a natural trailing pause.\n"
+            "- Never write laughter phonetically (no \"hahaha\"); use [laughs].\n\n"
+            "Produce 8 to 14 lines of dialogue. For each line set:\n"
+            '- "text": the words to speak, with any audio tags inline.\n'
+            '- "voice": "Male" for the interviewer, "Female" for the interviewee.\n'
+            '- "stability": 0.0 to 1.0. Lower is more expressive and emotive, higher is more '
+            "measured and consistent. Use around 0.3 for excited or emotional lines and around "
+            "0.7 for calm, factual explanation. Default to 0.5.\n\n"
+            # Single braces on purpose. CrewAI 1.x substitutes only {named} keys and
+            # leaves other braces alone; it does NOT unescape {{ }}, so doubling them
+            # would show the model malformed JSON.
+            "Here is an example of two lines:\n"
+            '{ "text": "[curious] So what actually changed this week?", "voice": "Male", "stability": 0.5 },\n'
+            '{ "text": "[laughs] Everything, honestly... [pauses] let me start at the beginning.", "voice": "Female", "stability": 0.3 }'
+        ),
+        expected_output=(
+            "A podcast script as a list of dialogue lines alternating between the male interviewer "
+            "and the female interviewee, each with text (including inline audio tags), voice, and stability."
+        ),
+        agent=senior_script_writer,
+        context=[fetch_news_task],
+        output_pydantic=PodcastScript,
+    )
+
+    return fetch_news_task, write_script_task
